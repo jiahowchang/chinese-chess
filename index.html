@@ -563,33 +563,90 @@
 
         // ===== AI 邏輯 =====
 
-        function evaluatePosition() {
-            const pieceValues = {
-                'JIANG': 10000,
-                'JU': 600,
-                'MA': 300,
-                'PAO': 300,
-                'SHI': 200,
-                'XIANG': 200,
-                'BING': 100,
-                'ZU': 100
-            };
+        const PIECE_VALUES = {
+            'JIANG': 100000,
+            'JU': 600,
+            'MA': 300,
+            'PAO': 300,
+            'SHI': 110,
+            'XIANG': 110,
+            'BING': 100,
+            'ZU': 100
+        };
 
+        const SEARCH_DEPTH = 3;
+
+        // 局面評分（黑方為正,紅方為負）
+        function evaluatePosition() {
             let score = 0;
             for (let row = 0; row < BOARD_ROWS; row++) {
                 for (let col = 0; col < BOARD_COLS; col++) {
                     const piece = board[row][col];
-                    if (piece) {
-                        const value = pieceValues[piece.type] || 0;
-                        if (piece.color === 'black') {
-                            score += value;
-                        } else {
-                            score -= value;
-                        }
+                    if (!piece) continue;
+                    let value = PIECE_VALUES[piece.type] || 0;
+
+                    // 過河的兵/卒加分
+                    if (piece.type === 'BING' && row <= 4) value += 30;
+                    if (piece.type === 'ZU' && row >= 5) value += 30;
+
+                    // 馬/炮在中央加分
+                    if (piece.type === 'MA' || piece.type === 'PAO') {
+                        const centerBonus = 4 - Math.abs(col - 4);
+                        value += centerBonus * 2;
                     }
+
+                    score += piece.color === 'black' ? value : -value;
                 }
             }
             return score;
+        }
+
+        // alpha-beta minimax 搜尋
+        function minimax(depth, alpha, beta, maximizingPlayer) {
+            const color = maximizingPlayer ? 'black' : 'red';
+            const moves = getAllValidMoves(color);
+
+            if (moves.length === 0) {
+                return maximizingPlayer ? -100000 - depth : 100000 + depth;
+            }
+            if (depth === 0) {
+                return evaluatePosition();
+            }
+
+            // 著法排序:優先嘗試吃子,提高剪枝效率
+            moves.sort((a, b) => {
+                const av = a.captured ? PIECE_VALUES[a.captured.type] : 0;
+                const bv = b.captured ? PIECE_VALUES[b.captured.type] : 0;
+                return bv - av;
+            });
+
+            if (maximizingPlayer) {
+                let maxEval = -Infinity;
+                for (const move of moves) {
+                    board[move.toRow][move.toCol] = move.piece;
+                    board[move.fromRow][move.fromCol] = null;
+                    const evalScore = minimax(depth - 1, alpha, beta, false);
+                    board[move.fromRow][move.fromCol] = move.piece;
+                    board[move.toRow][move.toCol] = move.captured;
+                    if (evalScore > maxEval) maxEval = evalScore;
+                    if (evalScore > alpha) alpha = evalScore;
+                    if (beta <= alpha) break;
+                }
+                return maxEval;
+            } else {
+                let minEval = Infinity;
+                for (const move of moves) {
+                    board[move.toRow][move.toCol] = move.piece;
+                    board[move.fromRow][move.fromCol] = null;
+                    const evalScore = minimax(depth - 1, alpha, beta, true);
+                    board[move.fromRow][move.fromCol] = move.piece;
+                    board[move.toRow][move.toCol] = move.captured;
+                    if (evalScore < minEval) minEval = evalScore;
+                    if (evalScore < beta) beta = evalScore;
+                    if (beta <= alpha) break;
+                }
+                return minEval;
+            }
         }
 
         function aiMove() {
@@ -608,29 +665,33 @@
                     return;
                 }
 
-                let bestMove = null;
+                moves.sort((a, b) => {
+                    const av = a.captured ? PIECE_VALUES[a.captured.type] : 0;
+                    const bv = b.captured ? PIECE_VALUES[b.captured.type] : 0;
+                    return bv - av;
+                });
+
                 let bestScore = -Infinity;
+                let candidates = [];
 
                 for (const move of moves) {
                     board[move.toRow][move.toCol] = move.piece;
                     board[move.fromRow][move.fromCol] = null;
 
-                    let score = evaluatePosition();
-
-                    if (move.captured) {
-                        score += 50;
-                    }
-
-                    score += Math.random() * 100;
-
-                    if (score > bestScore) {
-                        bestScore = score;
-                        bestMove = move;
-                    }
+                    const score = minimax(SEARCH_DEPTH - 1, -Infinity, Infinity, false);
 
                     board[move.fromRow][move.fromCol] = move.piece;
                     board[move.toRow][move.toCol] = move.captured;
+
+                    if (score > bestScore) {
+                        bestScore = score;
+                        candidates = [move];
+                    } else if (score === bestScore) {
+                        candidates.push(move);
+                    }
                 }
+
+                const bestMove = candidates[Math.floor(Math.random() * candidates.length)];
 
                 if (bestMove) {
                     board[bestMove.toRow][bestMove.toCol] = bestMove.piece;
@@ -643,7 +704,7 @@
                 }
 
                 isAIThinking = false;
-            }, 500);
+            }, 100);
         }
 
         // 畫面渲染
