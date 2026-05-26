@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中國象棋</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0e6d2;
+            font-family: "Microsoft YaHei", Arial, sans-serif;
+        }
+
+        #container {
+            text-align: center;
+        }
+
+        #canvas {
+            border: 3px solid #8b4513;
+            background-color: #daa520;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            cursor: pointer;
+        }
+
+        #info {
+            margin-top: 20px;
+            font-size: 18px;
+            color: #333;
+        }
+
+        .status {
+            margin: 10px 0;
+            font-weight: bold;
+        }
+
+        button {
+            margin: 10px 5px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #8b4513;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+
+        button:hover {
+            background-color: #a0522d;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>中國象棋</h1>
+        <canvas id="canvas" width="600" height="660"></canvas>
+        <div id="info">
+            <div class="status">當前回合：<span id="turn">紅方</span></div>
+            <div>
+                <button onclick="newGame()">重新開始</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // 棋盤設置
+        const PADDING = 40;
+        const CELL_SIZE = 60;
+        const PIECE_RADIUS = 25;
+
+        // 棋盤是 9x10（9條直線，10條橫線）
+        const BOARD_COLS = 9;
+        const BOARD_ROWS = 10;
+
+        // 棋子類型
+        const PIECES = {
+            RED: {
+                JIANG: '帥',
+                SHI: '仕',
+                XIANG: '相',
+                MA: '馬',
+                JU: '車',
+                PAO: '炮',
+                BING: '兵'
+            },
+            BLACK: {
+                JIANG: '將',
+                SHI: '士',
+                XIANG: '象',
+                MA: '馬',
+                JU: '車',
+                PAO: '炮',
+                ZU: '卒'
+            }
+        };
+
+        // 遊戲狀態
+        let board = [];
+        let selectedPiece = null;
+        let currentTurn = 'red'; // 'red' or 'black'
+        let gameOver = false;
+        let isAIThinking = false;
+
+        // 初始化棋盤
+        function initBoard() {
+            board = Array(10).fill(null).map(() => Array(9).fill(null));
+
+            // 紅方棋子（下方）
+            board[9][0] = { type: 'JU', color: 'red', text: PIECES.RED.JU };
+            board[9][1] = { type: 'MA', color: 'red', text: PIECES.RED.MA };
+            board[9][2] = { type: 'XIANG', color: 'red', text: PIECES.RED.XIANG };
+            board[9][3] = { type: 'SHI', color: 'red', text: PIECES.RED.SHI };
+            board[9][4] = { type: 'JIANG', color: 'red', text: PIECES.RED.JIANG };
+            board[9][5] = { type: 'SHI', color: 'red', text: PIECES.RED.SHI };
+            board[9][6] = { type: 'XIANG', color: 'red', text: PIECES.RED.XIANG };
+            board[9][7] = { type: 'MA', color: 'red', text: PIECES.RED.MA };
+            board[9][8] = { type: 'JU', color: 'red', text: PIECES.RED.JU };
+            board[7][1] = { type: 'PAO', color: 'red', text: PIECES.RED.PAO };
+            board[7][7] = { type: 'PAO', color: 'red', text: PIECES.RED.PAO };
+            board[6][0] = { type: 'BING', color: 'red', text: PIECES.RED.BING };
+            board[6][2] = { type: 'BING', color: 'red', text: PIECES.RED.BING };
+            board[6][4] = { type: 'BING', color: 'red', text: PIECES.RED.BING };
+            board[6][6] = { type: 'BING', color: 'red', text: PIECES.RED.BING };
+            board[6][8] = { type: 'BING', color: 'red', text: PIECES.RED.BING };
+
+            // 黑方棋子（上方）
+            board[0][0] = { type: 'JU', color: 'black', text: PIECES.BLACK.JU };
+            board[0][1] = { type: 'MA', color: 'black', text: PIECES.BLACK.MA };
+            board[0][2] = { type: 'XIANG', color: 'black', text: PIECES.BLACK.XIANG };
+            board[0][3] = { type: 'SHI', color: 'black', text: PIECES.BLACK.SHI };
+            board[0][4] = { type: 'JIANG', color: 'black', text: PIECES.BLACK.JIANG };
+            board[0][5] = { type: 'SHI', color: 'black', text: PIECES.BLACK.SHI };
+            board[0][6] = { type: 'XIANG', color: 'black', text: PIECES.BLACK.XIANG };
+            board[0][7] = { type: 'MA', color: 'black', text: PIECES.BLACK.MA };
+            board[0][8] = { type: 'JU', color: 'black', text: PIECES.BLACK.JU };
+            board[2][1] = { type: 'PAO', color: 'black', text: PIECES.BLACK.PAO };
+            board[2][7] = { type: 'PAO', color: 'black', text: PIECES.BLACK.PAO };
+            board[3][0] = { type: 'ZU', color: 'black', text: PIECES.BLACK.ZU };
+            board[3][2] = { type: 'ZU', color: 'black', text: PIECES.BLACK.ZU };
+            board[3][4] = { type: 'ZU', color: 'black', text: PIECES.BLACK.ZU };
+            board[3][6] = { type: 'ZU', color: 'black', text: PIECES.BLACK.ZU };
+            board[3][8] = { type: 'ZU', color: 'black', text: PIECES.BLACK.ZU };
+
+            currentTurn = 'red';
+            selectedPiece = null;
+            gameOver = false;
+            updateTurnDisplay();
+        }
+
+        // 繪製棋盤
+        function drawBoard() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 繪製背景
+            ctx.fillStyle = '#daa520';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 繪製棋盤線條
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 1.5;
+
+            // 橫線
+            for (let i = 0; i < BOARD_ROWS; i++) {
+                ctx.beginPath();
+                ctx.moveTo(PADDING, PADDING + i * CELL_SIZE);
+                ctx.lineTo(PADDING + (BOARD_COLS - 1) * CELL_SIZE, PADDING + i * CELL_SIZE);
+                ctx.stroke();
+            }
+
+            // 豎線（楚河漢界分開繪製）
+            for (let i = 0; i < BOARD_COLS; i++) {
+                // 上半部分（黑方）
+                ctx.beginPath();
+                ctx.moveTo(PADDING + i * CELL_SIZE, PADDING);
+                ctx.lineTo(PADDING + i * CELL_SIZE, PADDING + 4 * CELL_SIZE);
+                ctx.stroke();
+
+                // 下半部分（紅方）
+                ctx.beginPath();
+                ctx.moveTo(PADDING + i * CELL_SIZE, PADDING + 5 * CELL_SIZE);
+                ctx.lineTo(PADDING + i * CELL_SIZE, PADDING + 9 * CELL_SIZE);
+                ctx.stroke();
+            }
+
+            // 繪製九宮格斜線
+            // 黑方九宮格
+            ctx.beginPath();
+            ctx.moveTo(PADDING + 3 * CELL_SIZE, PADDING);
+            ctx.lineTo(PADDING + 5 * CELL_SIZE, PADDING + 2 * CELL_SIZE);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(PADDING + 5 * CELL_SIZE, PADDING);
+            ctx.lineTo(PADDING + 3 * CELL_SIZE, PADDING + 2 * CELL_SIZE);
+            ctx.stroke();
+
+            // 紅方九宮格
+            ctx.beginPath();
+            ctx.moveTo(PADDING + 3 * CELL_SIZE, PADDING + 7 * CELL_SIZE);
+            ctx.lineTo(PADDING + 5 * CELL_SIZE, PADDING + 9 * CELL_SIZE);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(PADDING + 5 * CELL_SIZE, PADDING + 7 * CELL_SIZE);
+            ctx.lineTo(PADDING + 3 * CELL_SIZE, PADDING + 9 * CELL_SIZE);
+            ctx.stroke();
+
+            // 繪製楚河漢界文字
+            ctx.font = 'bold 24px Microsoft YaHei';
+            ctx.fillStyle = '#000';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            const riverY = PADDING + 4.5 * CELL_SIZE;
+            ctx.fillText('楚河', PADDING + 2 * CELL_SIZE, riverY);
+            ctx.fillText('漢界', PADDING + 6 * CELL_SIZE, riverY);
+
+            // 繪製炮和兵/卒的標記點
+            drawMarkPoints();
+        }
+
+        // 繪製標記點（炮和兵/卒的位置）
+        function drawMarkPoints() {
+            const positions = [
+                [1, 2], [1, 7], // 黑炮位
+                [2, 0], [2, 2], [2, 4], [2, 6], [2, 8], // 黑卒位
+                [3, 1], [3, 7], // 紅炮位
+                [6, 0], [6, 2], [6, 4], [6, 6], [6, 8], // 紅兵位
+                [0, 1], [0, 7], // 黑方車後
+                [9, 1], [9, 7]  // 紅方車後
+            ];
+
+            ctx.fillStyle = '#000';
+            positions.forEach(([col, row]) => {
+                const x = PADDING + row * CELL_SIZE;
+                const y = PADDING + col * CELL_SIZE;
+                const size = 4;
+
+                // 繪製四個角的小標記
+                if (row > 0) {
+                    ctx.fillRect(x - size - 3, y - size - 3, size, 1);
+                    ctx.fillRect(x - size - 3, y - size - 3, 1, size);
+                    ctx.fillRect(x - size - 3, y + 3, size, 1);
+                    ctx.fillRect(x - size - 3, y + 3, 1, size);
+                }
+                if (row < 8) {
+                    ctx.fillRect(x + 4, y - size - 3, size, 1);
+                    ctx.fillRect(x + size + 3, y - size - 3, 1, size);
+                    ctx.fillRect(x + 4, y + 3, size, 1);
+                    ctx.fillRect(x + size + 3, y + 3, 1, size);
+                }
+            });
+        }
+
+        // 繪製棋子
+        function drawPieces() {
+            for (let row = 0; row < BOARD_ROWS; row++) {
+                for (let col = 0; col < BOARD_COLS; col++) {
+                    const piece = board[row][col];
+                    if (piece) {
+                        drawPiece(row, col, piece);
+                    }
+                }
+            }
+
+            // 繪製選中的棋子高亮
+            if (selectedPiece) {
+                const { row, col } = selectedPiece;
+                const x = PADDING + col * CELL_SIZE;
+                const y = PADDING + row * CELL_SIZE;
+
+                ctx.strokeStyle = '#00ff00';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(x, y, PIECE_RADIUS + 3, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        }
+
+        // 繪製單個棋子
+        function drawPiece(row, col, piece) {
+            const x = PADDING + col * CELL_SIZE;
+            const y = PADDING + row * CELL_SIZE;
+
+            // 繪製棋子圓形背景
+            ctx.fillStyle = piece.color === 'red' ? '#ffdddd' : '#333333';
+            ctx.beginPath();
+            ctx.arc(x, y, PIECE_RADIUS, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 繪製棋子邊框
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // 繪製棋子文字
+            ctx.fillStyle = piece.color === 'red' ? '#cc0000' : '#ffffff';
+            ctx.font = 'bold 28px Microsoft YaHei';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(piece.text, x, y);
+        }
+
+        // 更新回合顯示
+        function updateTurnDisplay() {
+            document.getElementById('turn').textContent = currentTurn === 'red' ? '紅方' : '黑方';
+            document.getElementById('turn').style.color = currentTurn === 'red' ? '#cc0000' : '#000000';
+        }
+
+        // ===== 象棋規則驗證 =====
+
+        // 檢查兩個將/帥是否照面
+        function checkGeneralsFacing() {
+            let redGeneral = null;
+            let blackGeneral = null;
+
+            for (let row = 0; row < BOARD_ROWS; row++) {
+                for (let col = 0; col < BOARD_COLS; col++) {
+                    const piece = board[row][col];
+                    if (piece && piece.type === 'JIANG') {
+                        if (piece.color === 'red') {
+                            redGeneral = { row, col };
+                        } else {
+                            blackGeneral = { row, col };
+                        }
+                    }
+                }
+            }
+
+            if (!redGeneral || !blackGeneral) return false;
+
+            if (redGeneral.col === blackGeneral.col) {
+                for (let row = blackGeneral.row + 1; row < redGeneral.row; row++) {
+                    if (board[row][redGeneral.col]) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            return false;
+        }
+
+        // 驗證移動是否合法
+        function isValidMove(fromRow, fromCol, toRow, toCol, piece) {
+            if (toRow < 0 || toRow >= BOARD_ROWS || toCol < 0 || toCol >= BOARD_COLS) {
+                return false;
+            }
+
+            const target = board[toRow][toCol];
+            if (target && target.color === piece.color) {
+                return false;
+            }
+
+            const rowDiff = Math.abs(toRow - fromRow);
+            const colDiff = Math.abs(toCol - fromCol);
+
+            switch (piece.type) {
+                case 'JIANG':
+                    if (rowDiff + colDiff !== 1) return false;
+
+                    if (piece.color === 'red') {
+                        if (toRow < 7 || toCol < 3 || toCol > 5) return false;
+                    } else {
+                        if (toRow > 2 || toCol < 3 || toCol > 5) return false;
+                    }
+                    return true;
+
+                case 'SHI':
+                    if (rowDiff !== 1 || colDiff !== 1) return false;
+
+                    if (piece.color === 'red') {
+                        if (toRow < 7 || toCol < 3 || toCol > 5) return false;
+                    } else {
+                        if (toRow > 2 || toCol < 3 || toCol > 5) return false;
+                    }
+                    return true;
+
+                case 'XIANG':
+                    if (rowDiff !== 2 || colDiff !== 2) return false;
+
+                    if (piece.color === 'red') {
+                        if (toRow < 5) return false;
+                    } else {
+                        if (toRow > 4) return false;
+                    }
+
+                    const midRow = (fromRow + toRow) / 2;
+                    const midCol = (fromCol + toCol) / 2;
+                    if (board[midRow][midCol]) return false;
+                    return true;
+
+                case 'MA':
+                    if (!((rowDiff === 2 && colDiff === 1) || (rowDiff === 1 && colDiff === 2))) {
+                        return false;
+                    }
+
+                    let blockRow, blockCol;
+                    if (rowDiff === 2) {
+                        blockRow = fromRow + (toRow - fromRow) / 2;
+                        blockCol = fromCol;
+                    } else {
+                        blockRow = fromRow;
+                        blockCol = fromCol + (toCol - fromCol) / 2;
+                    }
+
+                    if (board[blockRow][blockCol]) return false;
+                    return true;
+
+                case 'JU':
+                    if (fromRow !== toRow && fromCol !== toCol) return false;
+
+                    if (fromRow === toRow) {
+                        const start = Math.min(fromCol, toCol) + 1;
+                        const end = Math.max(fromCol, toCol);
+                        for (let col = start; col < end; col++) {
+                            if (board[fromRow][col]) return false;
+                        }
+                    } else {
+                        const start = Math.min(fromRow, toRow) + 1;
+                        const end = Math.max(fromRow, toRow);
+                        for (let row = start; row < end; row++) {
+                            if (board[row][fromCol]) return false;
+                        }
+                    }
+                    return true;
+
+                case 'PAO':
+                    if (fromRow !== toRow && fromCol !== toCol) return false;
+
+                    let count = 0;
+                    if (fromRow === toRow) {
+                        const start = Math.min(fromCol, toCol) + 1;
+                        const end = Math.max(fromCol, toCol);
+                        for (let col = start; col < end; col++) {
+                            if (board[fromRow][col]) count++;
+                        }
+                    } else {
+                        const start = Math.min(fromRow, toRow) + 1;
+                        const end = Math.max(fromRow, toRow);
+                        for (let row = start; row < end; row++) {
+                            if (board[row][fromCol]) count++;
+                        }
+                    }
+
+                    if (target) {
+                        return count === 1;
+                    } else {
+                        return count === 0;
+                    }
+
+                case 'BING':
+                case 'ZU':
+                    if (rowDiff + colDiff !== 1) return false;
+
+                    if (piece.color === 'red') {
+                        if (toRow > fromRow) return false;
+                        if (fromRow > 4 && toCol !== fromCol) return false;
+                    } else {
+                        if (toRow < fromRow) return false;
+                        if (fromRow < 5 && toCol !== fromCol) return false;
+                    }
+                    return true;
+
+                default:
+                    return false;
+            }
+        }
+
+        // 執行移動並檢查是否導致將帥照面
+        function makeMove(fromRow, fromCol, toRow, toCol) {
+            const piece = board[fromRow][fromCol];
+            const captured = board[toRow][toCol];
+
+            board[toRow][toCol] = piece;
+            board[fromRow][fromCol] = null;
+
+            if (checkGeneralsFacing()) {
+                board[fromRow][fromCol] = piece;
+                board[toRow][toCol] = captured;
+                return false;
+            }
+
+            return true;
+        }
+
+        // 獲取所有合法移動
+        function getAllValidMoves(color) {
+            const moves = [];
+            for (let fromRow = 0; fromRow < BOARD_ROWS; fromRow++) {
+                for (let fromCol = 0; fromCol < BOARD_COLS; fromCol++) {
+                    const piece = board[fromRow][fromCol];
+                    if (piece && piece.color === color) {
+                        for (let toRow = 0; toRow < BOARD_ROWS; toRow++) {
+                            for (let toCol = 0; toCol < BOARD_COLS; toCol++) {
+                                if (isValidMove(fromRow, fromCol, toRow, toCol, piece)) {
+                                    const captured = board[toRow][toCol];
+                                    board[toRow][toCol] = piece;
+                                    board[fromRow][fromCol] = null;
+
+                                    if (!checkGeneralsFacing()) {
+                                        moves.push({ fromRow, fromCol, toRow, toCol, piece, captured });
+                                    }
+
+                                    board[fromRow][fromCol] = piece;
+                                    board[toRow][toCol] = captured;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return moves;
+        }
+
+        // 檢查是否將軍或將死
+        function checkGameState() {
+            const opponentColor = currentTurn === 'red' ? 'black' : 'red';
+            const validMoves = getAllValidMoves(opponentColor);
+
+            if (validMoves.length === 0) {
+                gameOver = true;
+                alert(currentTurn === 'red' ? '紅方勝利！' : '黑方勝利！');
+            }
+        }
+
+        // ===== AI 邏輯 =====
+
+        function evaluatePosition() {
+            const pieceValues = {
+                'JIANG': 10000,
+                'JU': 600,
+                'MA': 300,
+                'PAO': 300,
+                'SHI': 200,
+                'XIANG': 200,
+                'BING': 100,
+                'ZU': 100
+            };
+
+            let score = 0;
+            for (let row = 0; row < BOARD_ROWS; row++) {
+                for (let col = 0; col < BOARD_COLS; col++) {
+                    const piece = board[row][col];
+                    if (piece) {
+                        const value = pieceValues[piece.type] || 0;
+                        if (piece.color === 'black') {
+                            score += value;
+                        } else {
+                            score -= value;
+                        }
+                    }
+                }
+            }
+            return score;
+        }
+
+        function aiMove() {
+            if (currentTurn !== 'black' || gameOver || isAIThinking) return;
+
+            isAIThinking = true;
+            updateTurnDisplay();
+
+            setTimeout(() => {
+                const moves = getAllValidMoves('black');
+
+                if (moves.length === 0) {
+                    gameOver = true;
+                    alert('紅方勝利！');
+                    isAIThinking = false;
+                    return;
+                }
+
+                let bestMove = null;
+                let bestScore = -Infinity;
+
+                for (const move of moves) {
+                    board[move.toRow][move.toCol] = move.piece;
+                    board[move.fromRow][move.fromCol] = null;
+
+                    let score = evaluatePosition();
+
+                    if (move.captured) {
+                        score += 50;
+                    }
+
+                    score += Math.random() * 100;
+
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestMove = move;
+                    }
+
+                    board[move.fromRow][move.fromCol] = move.piece;
+                    board[move.toRow][move.toCol] = move.captured;
+                }
+
+                if (bestMove) {
+                    board[bestMove.toRow][bestMove.toCol] = bestMove.piece;
+                    board[bestMove.fromRow][bestMove.fromCol] = null;
+
+                    currentTurn = 'red';
+                    checkGameState();
+                    updateTurnDisplay();
+                    render();
+                }
+
+                isAIThinking = false;
+            }, 500);
+        }
+
+        // 畫面渲染
+        function render() {
+            drawBoard();
+            drawPieces();
+        }
+
+        // 新遊戲
+        function newGame() {
+            initBoard();
+            render();
+        }
+
+        // 畫布點擊事件（待實現移動邏輯）
+        canvas.addEventListener('click', function(event) {
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            // 轉換為棋盤坐標
+            const col = Math.round((x - PADDING) / CELL_SIZE);
+            const row = Math.round((y - PADDING) / CELL_SIZE);
+
+            // 檢查是否在棋盤範圍內
+            if (row >= 0 && row < BOARD_ROWS && col >= 0 && col < BOARD_COLS) {
+                handleClick(row, col);
+            }
+        });
+
+        // 處理點擊
+        function handleClick(row, col) {
+            if (gameOver || isAIThinking || currentTurn !== 'red') return;
+
+            const piece = board[row][col];
+
+            if (selectedPiece) {
+                if (piece && piece.color === selectedPiece.piece.color) {
+                    selectedPiece = { row, col, piece };
+                } else {
+                    if (isValidMove(selectedPiece.row, selectedPiece.col, row, col, selectedPiece.piece)) {
+                        if (makeMove(selectedPiece.row, selectedPiece.col, row, col)) {
+                            currentTurn = 'black';
+                            selectedPiece = null;
+                            checkGameState();
+                            updateTurnDisplay();
+                            render();
+
+                            if (!gameOver) {
+                                aiMove();
+                            }
+                        } else {
+                            alert('此移動會導致將帥照面！');
+                        }
+                    } else {
+                        selectedPiece = null;
+                    }
+                }
+            } else if (piece && piece.color === 'red') {
+                selectedPiece = { row, col, piece };
+            }
+
+            render();
+        }
+
+        // 初始化遊戲
+        initBoard();
+        render();
+    </script>
+</body>
+</html>
