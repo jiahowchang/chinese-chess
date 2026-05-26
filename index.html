@@ -471,7 +471,35 @@
             }
         }
 
-        // 執行移動並檢查是否導致將帥照面
+        // 檢查指定顏色的將/帥是否被對方攻擊（被將軍）
+        function isInCheck(color) {
+            let generalPos = null;
+            for (let row = 0; row < BOARD_ROWS && !generalPos; row++) {
+                for (let col = 0; col < BOARD_COLS; col++) {
+                    const p = board[row][col];
+                    if (p && p.type === 'JIANG' && p.color === color) {
+                        generalPos = { row, col };
+                        break;
+                    }
+                }
+            }
+            if (!generalPos) return true;
+
+            const opponentColor = color === 'red' ? 'black' : 'red';
+            for (let row = 0; row < BOARD_ROWS; row++) {
+                for (let col = 0; col < BOARD_COLS; col++) {
+                    const p = board[row][col];
+                    if (p && p.color === opponentColor) {
+                        if (isValidMove(row, col, generalPos.row, generalPos.col, p)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        // 執行移動並檢查是否會導致將帥照面或自己被將軍
         function makeMove(fromRow, fromCol, toRow, toCol) {
             const piece = board[fromRow][fromCol];
             const captured = board[toRow][toCol];
@@ -479,7 +507,7 @@
             board[toRow][toCol] = piece;
             board[fromRow][fromCol] = null;
 
-            if (checkGeneralsFacing()) {
+            if (checkGeneralsFacing() || isInCheck(piece.color)) {
                 board[fromRow][fromCol] = piece;
                 board[toRow][toCol] = captured;
                 return false;
@@ -502,7 +530,7 @@
                                     board[toRow][toCol] = piece;
                                     board[fromRow][fromCol] = null;
 
-                                    if (!checkGeneralsFacing()) {
+                                    if (!checkGeneralsFacing() && !isInCheck(color)) {
                                         moves.push({ fromRow, fromCol, toRow, toCol, piece, captured });
                                     }
 
@@ -521,10 +549,15 @@
         function checkGameState() {
             const opponentColor = currentTurn === 'red' ? 'black' : 'red';
             const validMoves = getAllValidMoves(opponentColor);
+            const inCheck = isInCheck(opponentColor);
 
             if (validMoves.length === 0) {
                 gameOver = true;
-                alert(currentTurn === 'red' ? '紅方勝利！' : '黑方勝利！');
+                const winner = currentTurn === 'red' ? '紅方' : '黑方';
+                const reason = inCheck ? '將死' : '困斃';
+                setTimeout(() => alert(`${winner}勝利！(${reason})`), 50);
+            } else if (inCheck) {
+                setTimeout(() => alert(opponentColor === 'red' ? '紅方被將軍！' : '黑方被將軍！'), 50);
             }
         }
 
@@ -663,7 +696,7 @@
                                 aiMove();
                             }
                         } else {
-                            alert('此移動會導致將帥照面！');
+                            alert('此移動會讓自己被將軍或導致將帥照面！');
                         }
                     } else {
                         selectedPiece = null;
